@@ -23,13 +23,11 @@ RH_RF69 rf69(RFM69_CS, RFM69_INT);  // Singleton instance of the radio driver
 
 
 /*INCLUDES Y DEFINITIONS MISION GPS*/
-#include <Adafruit_GPS.h>
-#include <SoftwareSerial.h>
-HardwareSerial mySerial = Serial1;
-Adafruit_GPS GPS(&mySerial);
-#define GPSECHO  true
-boolean usingInterrupt = false;
-void useInterrupt(boolean); // Func prototype keeps Arduino 0023 happy
+#include <Adafruit_GPS.h> // what's the name of the hardware serial port?
+#define GPSSerial Serial1
+Adafruit_GPS GPS(&GPSSerial);// Connect to the GPS on the hardware port
+#define GPSECHO false
+uint32_t timer = millis();
 
 
 /*INCLUDES Y DEFINITIONS MISION TEMP Y HUMEDAD*/
@@ -41,36 +39,6 @@ DHT dht(DHTPIN, DHTTYPE); // Inincializa el sensor de temperatura y humedad
 
 /*DEFINITIONS CAMARA*/
 int trig = 6;     //Definicion de pin
-
-
-
-
-// Interrupt is called once a millisecond, looks for any new GPS data, and stores it
-SIGNAL(TIMER0_COMPA_vect) {
-  char c = GPS.read();
-  // if you want to debug, this is a good time to do it!
-#ifdef UDR0
-  if (GPSECHO)
-    if (c) UDR0 = c;  
-    // writing direct to UDR0 is much much faster than Serial.print 
-    // but only one character can be written at a time. 
-#endif
-}
-void useInterrupt(boolean v) {
-  if (v) {
-    // Timer0 is already used for millis() - we'll just interrupt somewhere
-    // in the middle and call the "Compare A" function above
-    OCR0A = 0xAF;
-    TIMSK0 |= _BV(OCIE0A);
-    usingInterrupt = true;
-  } else {
-    // do not call the interrupt function COMPA anymore
-    TIMSK0 &= ~_BV(OCIE0A);
-    usingInterrupt = false;
-  }
-}
-uint32_t timer = millis();
-
 
 
 
@@ -101,7 +69,6 @@ void camera_video(bool state) {
 
 
 
-
 int16_t packetnum = 0;  // packet counter, we increment per xmission
 void setup() 
 {
@@ -110,6 +77,7 @@ void setup()
   //while (!Serial) { delay(1); } // wait until serial console is open, remove if not tethered to computer
   
   /*CONFIGURACION DEL RADIO*/
+  
   pinMode(RFM69_RST, OUTPUT);               //Definicion del pin de reset
   digitalWrite(RFM69_RST, LOW);     
   digitalWrite(RFM69_RST, HIGH);delay(10);  //Reset Manual del radio
@@ -133,41 +101,29 @@ void setup()
   dht.begin();
 
   /*CONFIGURACION DE LA CAMRA*/
+  
   pinMode(trig, OUTPUT);         
   digitalWrite(trig, HIGH); 
+
   
   /*CONFIGURACION DEL GPS*/
-  /*
-  GPS.wakeup();
-  GPS.begin(9600);    //Definicion del NMEA Baud rate MTK GPS
-  
+  //Serial.begin(115200);
+  Serial.println("Adafruit GPS library basic test!");
+  GPS.begin(9600);
   // uncomment this line to turn on RMC (recommended minimum) and GGA (fix data) including altitude
-  //GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
-  
+  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
   // uncomment this line to turn on only the "minimum recommended" data
-  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
+  //GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
   // For parsing data, we don't suggest using anything but either RMC only or RMC+GGA since
   // the parser doesn't care about other sentences at this time
-  
   // Set the update rate
-  //GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);   // 1 Hz update rate  //TODO: Revisar esta funcion
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 1 Hz update rate
   // For the parsing code to work nicely and have time to sort thru the data, and
-  // print it out we don't suggest using anything higher than 1 Hz
-
+  // print it out we don't suggest using anything higher than 1 Hz     
   // Request updates on antenna status, comment out to keep quiet
   GPS.sendCommand(PGCMD_ANTENNA);
-
-  // the nice thing about this code is you can have a timer0 interrupt go off
-  // every 1 millisecond, and read data from the GPS for you. that makes the
-  // loop code a heck of a lot easier!
-  useInterrupt(false);
-
-  delay(1000);
-  // Ask for firmware version
-  mySerial.println(PMTK_Q_RELEASE);
-
-  */
-
+  delay(1000);  
+  GPSSerial.println(PMTK_Q_RELEASE);// Ask for firmware version
 
 
   
@@ -185,18 +141,21 @@ void setup()
 
 
 void loop() {
-  delay(3000);  // Wait 1 second between transmits, could also 'sleep' here!
+  //delay(10);  // Wait 1 second between transmits, could also 'sleep' here!
 
   /*OBTENCION DATOS MISION TEMP Y HUMEDAD*/
+  
   float h = dht.readHumidity(); // Read temperature as Celsius (the default)  
   float t = dht.readTemperature(); // Read temperature as Fahrenheit (isFahrenheit = true)  
   float f = dht.readTemperature(true);  
+  
   if (isnan(h) || isnan(t) || isnan(f)) { // Check if any reads failed and exit early (to try again).
     Serial.println("Failed to read from DHT sensor!");
     return;
   }  
   float hif = dht.computeHeatIndex(f, h); // Compute heat index in Fahrenheit (the default)  
   float hic = dht.computeHeatIndex(t, h, false);  // Compute heat index in Celsius (isFahreheit = false)
+ 
   /*Serial.print("H: ");
   Serial.print(h);
   Serial.print("\t T: ");
@@ -208,116 +167,141 @@ void loop() {
 
 
 
-  /*ENVIAR TELEMETRIA Y DATOS MISION*/
-  char *cansatName= "CanSatCR";
-  char radiopacket[25];
-  char *fhic,*fhif;
-  //ftoa(fhic, hic, 1);
-
-  sprintf(radiopacket,"%s#%i,%i,%i,%i,%i",cansatName,packetnum++,(int) h,(int) t,(int) hic,(int) hif);
-  
-
-  //char *ftoa(char *a, double f, int precision)
-
-
-
-  Serial.println("\nSending beacon: #,h,t,hic,hif");    //TODO: quitar antes del lanzamiento  
-  Serial.println(radiopacket);                      //TODO: quitar antes del lanzamiento    
-  rf69.send((uint8_t *)radiopacket, strlen(radiopacket));     //Envia el beacon por RF
-  Serial.println("Waiting for acknowledge...");        //TODO: quitar antes del lanzamiento  
-  rf69.waitPacketSent();              
-  uint8_t buf[RH_RF69_MAX_MESSAGE_LEN];
-  uint8_t len = sizeof(buf);
-  if (rf69.waitAvailableTimeout(500))  {     
-    if (rf69.recv(buf, &len)) {       // Revisa si hay respuesta
-      Serial.print("Reply: ");        //TODO: quitar antes del lanzamiento  
-      Serial.println((char*)buf);     //TODO: quitar antes del lanzamiento
-      Serial.print("RSSI: ");         //TODO: quitar antes del lanzamiento  
-      Serial.println(rf69.lastRssi(), DEC);     //TODO: quitar antes del lanzamiento  
-
-      if(buf[0]!=BEACON_VERF_CODE){
-        Serial.println("Not a CMD!");        //TODO: quitar antes del lanzamiento          
-        camera_video(false); //TODO: agregar apagar
-      } 
-      else{
-        Serial.println("Verified CMD!");        //TODO: quitar antes del lanzamiento  
-        Serial.println("Turning ON video mission");        //TODO: quitar antes del lanzamiento  
-        camera_video(true); //TODO: agregar apagar  //TODO: Verificar bien cual comando es (CMD decode)
-      }
-
-      
-    } else {
-      Serial.println("Receive failed");   //TODO: quitar antes del lanzamiento  
-    }
-  } else {
-    Serial.println("No reply!!");         //TODO: quitar antes del lanzamiento  
-  }
-  
-  
-
-
-
 
   /*OBTENCION DATOS MISION GPS*/
-
-  /*
-   // in case you are not using the interrupt above, you'll
-  // need to 'hand query' the GPS, not suggested :(
-  if (! usingInterrupt) {
-    // read data from the GPS in the 'main loop'
-    char c = GPS.read();
-    // if you want to debug, this is a good time to do it!
-    if (GPSECHO)
-      if (c) Serial.print(c);
-  }
   
+  //receive_gps();
+  char c = GPS.read();  // read data from the GPS 
+  // if you want to debug, this is a good time to do it!
+  
+  if (GPSECHO)    
+    if (c) Serial.print(c);
   // if a sentence is received, we can check the checksum, parse it...
+  //Serial.println("sdf1");
   if (GPS.newNMEAreceived()) {
+    //Serial.println("sdf2");
     // a tricky thing here is if we print the NMEA sentence, or data
-    // we end up not listening and catching other sentences! 
+    // we end up not listening and catching other sentences!
     // so be very wary if using OUTPUT_ALLDATA and trytng to print out data
-    //Serial.println(GPS.lastNMEA());   // this also sets the newNMEAreceived() flag to false
-  
-    if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
-      return;  // we can fail to parse a sentence in which case we should just wait for another
+    //Serial.println(GPS.lastNMEA()); // this also sets the newNMEAreceived() flag to false
+    if (!GPS.parse(GPS.lastNMEA())) // this also sets the newNMEAreceived() flag to false
+      return; // we can fail to parse a sentence in which case we should just wait for another
   }
-
   // if millis() or timer wraps around, we'll just reset it
-  if (timer > millis())  timer = millis();
-
+  if (timer > millis()) timer = millis();
+  
+     
   // approximately every 2 seconds or so, print out the current stats
-  if (millis() - timer > 2000) { 
+  if (millis() - timer > 2000) {
     timer = millis(); // reset the timer
-    
     Serial.print("\nTime: ");
     Serial.print(GPS.hour, DEC); Serial.print(':');
     Serial.print(GPS.minute, DEC); Serial.print(':');
     Serial.print(GPS.seconds, DEC); Serial.print('.');
-    Serial.println(GPS.milliseconds);
-    Serial.print("Date: ");
+    Serial.print(GPS.milliseconds);
+    Serial.print(" -- Date: ");
     Serial.print(GPS.day, DEC); Serial.print('/');
     Serial.print(GPS.month, DEC); Serial.print("/20");
     Serial.println(GPS.year, DEC);
     Serial.print("Fix: "); Serial.print((int)GPS.fix);
-    Serial.print(" quality: "); Serial.println((int)GPS.fixquality); 
+    Serial.print(" quality: "); Serial.println((int)GPS.fixquality);
+    float latitude, longitude;
     if (GPS.fix) {
-      Serial.print("Location: ");
-      Serial.print(GPS.latitude, 4); Serial.print(GPS.lat);
-      Serial.print(", "); 
-      Serial.print(GPS.longitude, 4); Serial.println(GPS.lon);
-      Serial.print("Location (in degrees, works with Google Maps): ");
-      Serial.print(GPS.latitudeDegrees, 4);
-      Serial.print(", "); 
-      Serial.println(GPS.longitudeDegrees, 4);
-      
-      Serial.print("Speed (knots): "); Serial.println(GPS.speed);
-      Serial.print("Angle: "); Serial.println(GPS.angle);
+      latitude = GPS.latitudeDegrees;
+      longitude = GPS.longitudeDegrees;
+      Serial.print("Lat,Long: ");
+      Serial.print(latitude, 4); Serial.print(GPS.lat);
+      Serial.print(", ");
+      Serial.print(longitude, 4); Serial.println(GPS.lon);
+      //Serial.print("Speed (knots): "); Serial.println(GPS.speed);
+      //Serial.print("Angle: "); Serial.println(GPS.angle);
       Serial.print("Altitude: "); Serial.println(GPS.altitude);
       Serial.print("Satellites: "); Serial.println((int)GPS.satellites);
     }
-  }
 
-  */
+    
+
+    /*ENVIAR TELEMETRIA Y DATOS MISION*/    
+    char *cansatName= "CanSatCR";
+    char radiopacket[25];
+    char *fhic,*fhif;
+    //ftoa(fhic, hic, 1);
+    int latDec = latitude;
+    int longDec = longitude;
+    float tmpLat = latitude - latDec;
+    float tmpLong = longitude - longDec;
+    int latFrac = trunc(tmpLat * 10000);
+    int longFrac = abs(trunc(tmpLong * 10000));
+    
+    sprintf(radiopacket,"%s#%i,%i,%i,%i,%i,%i.%i,%i.%i",cansatName,packetnum++,(int) h,(int) t,(int) hic,(int) hif,latDec,latFrac,longDec,longFrac);
+    
+  
+    //char *ftoa(char *a, double f, int precision)
+  
+    
+  
+    //Serial.println("\nSending beacon: #,h,t,hic,hif");    //TODO: quitar antes del lanzamiento  
+    Serial.println(radiopacket);                      //TODO: quitar antes del lanzamiento    
+    
+    rf69.send((uint8_t *)radiopacket, strlen(radiopacket));     //Envia el beacon por RF
+    //Serial.println("Waiting for acknowledge...");        //TODO: quitar antes del lanzamiento  
+    //rf69.waitPacketSent();              
+
+    
+    
+    
+    uint8_t buf[RH_RF69_MAX_MESSAGE_LEN];
+    uint8_t len = sizeof(buf);
+    
+    if (rf69.waitAvailableTimeout(500))  {     
+      if (rf69.recv(buf, &len)) {       // Revisa si hay respuesta
+        //Serial.print("Reply: ");        //TODO: quitar antes del lanzamiento  
+        //Serial.println((char*)buf);     //TODO: quitar antes del lanzamiento
+        //Serial.print("RSSI: ");         //TODO: quitar antes del lanzamiento  
+        //Serial.println(rf69.lastRssi(), DEC);     //TODO: quitar antes del lanzamiento  
+  
+        if(buf[0]!=BEACON_VERF_CODE){
+          //Serial.println("Not a CMD!");        //TODO: quitar antes del lanzamiento          
+          camera_video(false); //TODO: agregar apagar
+        } 
+        else{
+          //Serial.println("Verified CMD!");        //TODO: quitar antes del lanzamiento  
+          //Serial.println("Turning ON video mission");        //TODO: quitar antes del lanzamiento  
+          camera_video(true); //TODO: agregar apagar  //TODO: Verificar bien cual comando es (CMD decode)
+        }
+  
+        
+      } else {
+        //Serial.println("Receive failed");   //TODO: quitar antes del lanzamiento  
+      }
+    } else {
+      //Serial.println("No reply!!");         //TODO: quitar antes del lanzamiento  
+    }  
+
+
+    free(radiopacket);
+    
+
+
+
+
+    
+  }//end of if from 2 seconds
+  
+
+  
+
+
+
+  
+  
+
+
+
+
+  
+
+  
 
 
 }

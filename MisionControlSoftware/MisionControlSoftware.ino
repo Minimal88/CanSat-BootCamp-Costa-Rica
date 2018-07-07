@@ -88,7 +88,7 @@ void loop() {
       uint8_t data[] = "CMD_start_video";
       rf69.send(data, sizeof(data));
       rf69.waitPacketSent();
-      Serial.println("Sent a reply");
+      Serial.println("Sent CMD_start_video ON");
         
       
     } else {

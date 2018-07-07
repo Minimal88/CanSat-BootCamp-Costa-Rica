@@ -4,9 +4,10 @@ int led = 1;
 void setup() {                
   // Inicializa los pines digitales como salidas
   pinMode(led, OUTPUT);
-  pinMode(trig, OUTPUT);         
 
   digitalWrite(led, HIGH);  
+  
+  pinMode(trig, OUTPUT);         
   digitalWrite(trig, HIGH); 
 }
 
