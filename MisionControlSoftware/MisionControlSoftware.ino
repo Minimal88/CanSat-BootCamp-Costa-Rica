@@ -75,11 +75,9 @@ void loop() {
     if (rf69.recv(buf, &len)) {
       if (!len) return;
       buf[len] = 0;
-      Serial.print("Received [");
-      Serial.print(len);
-      Serial.print("]: ");
+      Serial.print("Received:");      
       Serial.println((char*)buf);
-      Serial.print("RSSI: ");
+      Serial.print("RSSI:");
       Serial.println(rf69.lastRssi(), DEC);
 
       if (strstr((char *)buf, "Hello Worlp")) {//TODO: agregar una verificacion de beacon

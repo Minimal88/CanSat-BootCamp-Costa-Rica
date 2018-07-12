@@ -42,8 +42,6 @@ int trig = 6;     //Definicion de pin
 int camara_status;
 
 
-char tmpLongFrac[10];
-char tmpLatFrac[10];
 
 
 char *ftoa(char *a, float f, int precision)
@@ -236,7 +234,7 @@ void loop() {
 
     /*ENVIAR TELEMETRIA Y DATOS MISION*/    
     char *cansatName= "CanSatCR";
-    char radiopacket[40];
+    char radiopacket[25];
     char *fhic,*fhif;
     //ftoa(fhic, hic, 1);
     int latDec = latitude;
@@ -245,17 +243,22 @@ void loop() {
     float tmpLong = longitude - longDec;
     int latFrac = abs(trunc(tmpLat * 10000));
     int longFrac = abs(trunc(tmpLong * 10000));
-    int longFrac2 = abs(trunc(tmpLong * 1000000));
-    
-    sprintf(tmpLatFrac, "%04d",latFrac);
-    sprintf(tmpLongFrac, "%04d",longFrac);
-      
-    Serial.print(tmpLong);
-    
-    sprintf(radiopacket,"%s#%i,%i,%i,%i,%i,%i.%s,%i.%s,%i,%i,%i,",cansatName,packetnum++,(int) h,(int) t,(int) hic,(int) hif,latDec,tmpLatFrac,longDec,tmpLongFrac,(int) altitude,camara_status,(int) rf69.lastRssi());
 
-    *tmpLatFrac="";
-    *tmpLongFrac="";
+    char tmpLatFrac[50];
+    snprintf(tmpLatFrac, sizeof(tmpLatFrac), "%04d",latFrac);
+
+    char tmpLongFrac[50];
+    snprintf(tmpLongFrac, sizeof(tmpLongFrac), "%04d",longFrac);
+    
+    if (intLen(latFrac)<4){
+      Serial.println("menor que 4");
+    }
+    Serial.print("\nint tamaño: %i ");
+    Serial.println(tmpLongFrac);
+    
+    
+    sprintf(radiopacket,"%s#%i,%i,%i,%i,%i,%i.%s,%i.%s,%i,%i,%i,",cansatName,packetnum++,(int) h,(int) t,(int) hic,(int) hif,latDec,(int)tmpLatFrac,longDec,(int)tmpLongFrac,(int) altitude,camara_status,(int) rf69.lastRssi());
+    
   
     //char *ftoa(char *a, double f, int precision)
   
