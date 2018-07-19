@@ -7,6 +7,27 @@ import serial
 import atexit
 import time
 from datetime import date, datetime
+import sys, time, msvcrt
+
+def readInput( caption, default, timeout = 5):
+    start_time = time.time()
+    sys.stdout.write('%s(%s):'%(caption, default))
+    sys.stdout.flush()
+    input = ''
+    while True:
+        if msvcrt.kbhit():
+            byte_arr = msvcrt.getche()
+            if ord(byte_arr) == 13: # enter_key
+                break
+            elif ord(byte_arr) >= 32: #space_char
+                input += "".join(map(chr,byte_arr))
+        if len(input) == 0 and (time.time() - start_time) > timeout:            
+            break    
+    if len(input) > 0:
+        return input
+    else:
+        return default
+
 
 
 cansat_names = ['CanSatCR','SulaBatsu','Cansat2','Cansat4','Cansat6','Cansat5']
@@ -17,6 +38,7 @@ print(ser.name)         # check which port was really used
 @atexit.register
 def goodbye():
     ser.close()             # close port when exiting the program
+
 
 # Setup the Sheets API
 SPREADSHEET_ID = '13KYNKFreWm4SWH6Ra5fFqb8qi5KZ7VOrwdeU28r4jnM'
@@ -65,11 +87,11 @@ def uploadTelemetry(cansat_index):
     return;
 
 while True:    
-    telemetry_raw = str(ser.read(150))
-    telemetry=str(telemetry_raw[telemetry_raw.find("Received")+9:])
-    #print(telemetry+'\n')
+    buffer_in = str(ser.read(150))
+    telemetry=str(buffer_in[buffer_in.find("Received")+9:])
+    #print(buffer_in+'\n')
     if len(telemetry)>2:
-        print(telemetry)    
+        print('\n'+telemetry)    
         cansat_name= telemetry[:telemetry.find("#")]
         data = telemetry[telemetry.find("#")+1:].split(',')
         if len(data)>2:
@@ -89,6 +111,18 @@ while True:
                 rssi_gs = "X"      
             uploadTelemetry(cansat_names.index(cansat_name))     
         #print(data)
-        
+        # Collect events until released
+
+    
+    cmd_input = readInput('\nCMD_Mission:', 5 ) 
+    print(cmd_input)
+    if (cmd_input=='c'):
+        ser.write(cmd_input.encode())
+        print('Turning ON video...')
+    elif (cmd_input=='x'):        
+        ser.write(cmd_input.encode())
+        print('Turning OFF video...')
+    
+
                                   
   

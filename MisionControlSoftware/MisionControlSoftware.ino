@@ -15,7 +15,8 @@
 #define RFM69_RST     2  // "A"
 #define RF69_FREQ 433.0
   
-
+int incomingByte = 0;   // for incoming serial data
+int camara_status = 0;
 
 RH_RF69 rf69(RFM69_CS, RFM69_INT);
 
@@ -67,6 +68,17 @@ void setup()
 
 
 void loop() {
+  if (Serial.available() > 0) {
+      // read the incoming byte:
+      incomingByte = Serial.read();
+      if(incomingByte==99){ //'c'
+        camara_status = 1;
+        Serial.print("Turning ON video...");
+      }else {
+        camara_status = 0;
+        Serial.print("Turning OFF video...");
+      }      
+  }
  
  if (rf69.available()) {
     // Should be a message for us now   
@@ -83,10 +95,21 @@ void loop() {
       if (strstr((char *)buf, "Hello Worlp")) {//TODO: agregar una verificacion de beacon
       }
       // Send a reply!
-      uint8_t data[] = "CMD_start_video";
-      rf69.send(data, sizeof(data));
+      uint8_t data[] = "XMD_start_video"; 
+      if (camara_status==1){
+        uint8_t data[] = "CMD_start_video"; 
+        rf69.send(data, sizeof(data));
+        Serial.println("Sent CMD_start_video ON");
+      }
+      else {
+        uint8_t data1[] = "XMD_stop_video";
+        rf69.send(data1, sizeof(data));
+        Serial.println("Sent XMD_stop_video OFF");
+      }
+      
+      
       rf69.waitPacketSent();
-      Serial.println("Sent CMD_start_video ON");
+      
         
       
     } else {

@@ -1,22 +1,13 @@
-// rf69 demo tx rx.pde
-// -*- mode: C++ -*-
-// Example sketch showing how to create a simple messageing client
-// with the RH_RF69 class. RH_RF69 class does not provide for addressing or
-// reliability, so you should only use RH_RF69  if you do not need the higher
-// level messaging abilities.
-// It is designed to work with the other example rf69_server.
-// Demonstrates the use of AES encryption, setting the frequency and modem 
-// configuration
-
+#include <stdio.h>
 /*INCLUDES Y DEFINITIONS MISION COMS*/
 #include <SPI.h>
 #include <RH_RF69.h>
 #define __AVR_ATmega328P__
 #define RF69_FREQ 433.0
 #if defined (__AVR_ATmega328P__)  // Feather 328P w/wing
-  #define RFM69_INT     3  // Definicion de pin
-  #define RFM69_CS      4  // Definicion de pin
-  #define RFM69_RST     2  // Definicion de pin
+#define RFM69_INT     3  // Definicion de pin
+#define RFM69_CS      4  // Definicion de pin
+#define RFM69_RST     2  // Definicion de pin
 #endif
 RH_RF69 rf69(RFM69_CS, RFM69_INT);  // Singleton instance of the radio driver
 #define BEACON_VERF_CODE        67      // 'C'
@@ -39,7 +30,7 @@ DHT dht(DHTPIN, DHTTYPE); // Inincializa el sensor de temperatura y humedad
 
 /*DEFINITIONS CAMARA*/
 int trig = 6;     //Definicion de pin
-int camara_status;
+int camara_status = 0;
 
 
 char tmpLongFrac[10];
@@ -48,64 +39,71 @@ char tmpLatFrac[10];
 
 char *ftoa(char *a, float f, int precision)
 {
- long p[] = {0,10,100,1000,10000,100000,1000000,10000000,100000000}; 
- char *ret = a;
- long heiltal = (long)f;
- itoa(heiltal, a, 10);
- while (*a != '\0') a++;
- *a++ = '.';
- long desimal = abs((long)((f - heiltal) * p[precision]));
- itoa(desimal, a, 10);
- return ret;
+  long p[] = {0, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000};
+  char *ret = a;
+  long heiltal = (long)f;
+  itoa(heiltal, a, 10);
+  while (*a != '\0') a++;
+  *a++ = '.';
+  long desimal = abs((long)((f - heiltal) * p[precision]));
+  itoa(desimal, a, 10);
+  return ret;
 }
 
 
-void camera_video(bool state) {
-  if (state){ //Si TRUE prende el video    
-    digitalWrite(trig, LOW);   
-  }else{
-    digitalWrite(trig, HIGH);    
+void toggle_video(bool state) {
+  if (state) { //Si TRUE prende el video
+    digitalWrite(trig, LOW);
+    delay(3000);
+    digitalWrite(trig, HIGH);
+    delay(3000);
+    digitalWrite(trig, LOW);
+  } else {
+    digitalWrite(trig, LOW);
+
+
   }
-  //delay(30000);   //Delay a modificar para cambiar a modo de foto o modo de caotura de video            
+  //delay(30000);   //Delay a modificar para cambiar a modo de foto o modo de caotura de video
 }
 
-int intLen(unsigned x) {    
-    if (x >= 100000)     return 6;
-    if (x >= 10000)      return 5;
-    if (x >= 1000)       return 4;
-    if (x >= 100)        return 3;
-    if (x >= 10)         return 2;
-    if (x >= 10)         return 1;
-    return 1;
+int intLen(unsigned x) {
+  if (x >= 100000)     return 6;
+  if (x >= 10000)      return 5;
+  if (x >= 1000)       return 4;
+  if (x >= 100)        return 3;
+  if (x >= 10)         return 2;
+  if (x >= 10)         return 1;
+  return 1;
 }
 
 
 
 int16_t packetnum = 0;  // packet counter, we increment per xmission
-void setup() 
+void setup()
 {
   /*INICIACILIZACION DE PUERTO SERIAL*/ //TODO: quitar antes del lanzamiento
   Serial.begin(115200);
   //while (!Serial) { delay(1); } // wait until serial console is open, remove if not tethered to computer
-  
+
   /*CONFIGURACION DEL RADIO*/
-  
+
   pinMode(RFM69_RST, OUTPUT);               //Definicion del pin de reset
-  digitalWrite(RFM69_RST, LOW);     
-  digitalWrite(RFM69_RST, HIGH);delay(10);  //Reset Manual del radio
-  digitalWrite(RFM69_RST, LOW);delay(10);  
+  digitalWrite(RFM69_RST, LOW);
+  digitalWrite(RFM69_RST, HIGH); delay(10); //Reset Manual del radio
+  digitalWrite(RFM69_RST, LOW); delay(10);
   if (!rf69.init()) {                       //Inicializacion del radio
     Serial.println("RFM69 radio init failed"); //TODO: quitar antes del lanzamiento
     while (1);
   }
-  Serial.println("RFM69 radio init OK!");   //TODO: quitar antes del lanzamiento  
+  Serial.println("RFM69 radio init OK!");   //TODO: quitar antes del lanzamiento
   if (!rf69.setFrequency(RF69_FREQ)) {      //Configuracion de la frecuencia
     Serial.println("setFrequency failed");  //TODO: quitar antes del lanzamiento
   }
-  rf69.setTxPower(20, true);                //Configuracion de la potencia 
+  rf69.setTxPower(20, true);                //Configuracion de la potencia
   uint8_t key[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-                    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
-  rf69.setEncryptionKey(key);               //Configuracion de la encriptacion  
+                    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08
+                  };
+  rf69.setEncryptionKey(key);               //Configuracion de la encriptacion
   Serial.print("RFM69 radio @");  Serial.print((int)RF69_FREQ);  Serial.println(" MHz");  //TODO: quitar antes del lanzamient
 
 
@@ -113,14 +111,14 @@ void setup()
   dht.begin();
 
   /*CONFIGURACION DE LA CAMRA*/
-  
-  pinMode(trig, OUTPUT);         
-  digitalWrite(trig, HIGH); 
 
-  
+  pinMode(trig, OUTPUT);
+  digitalWrite(trig, HIGH);
+
+
   /*CONFIGURACION DEL GPS*/
   //Serial.begin(115200);
-  Serial.println("Adafruit GPS library basic test!");
+  Serial.println("Cansat Mission Software!");
   GPS.begin(9600);
   // uncomment this line to turn on RMC (recommended minimum) and GGA (fix data) including altitude
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
@@ -131,15 +129,15 @@ void setup()
   // Set the update rate
   GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 1 Hz update rate
   // For the parsing code to work nicely and have time to sort thru the data, and
-  // print it out we don't suggest using anything higher than 1 Hz     
+  // print it out we don't suggest using anything higher than 1 Hz
   // Request updates on antenna status, comment out to keep quiet
   GPS.sendCommand(PGCMD_ANTENNA);
-  delay(1000);  
+  delay(1000);
   GPSSerial.println(PMTK_Q_RELEASE);// Ask for firmware version
 
 
-  
-  
+
+
 }
 
 
@@ -156,37 +154,26 @@ void loop() {
   //delay(10);  // Wait 1 second between transmits, could also 'sleep' here!
 
   /*OBTENCION DATOS MISION TEMP Y HUMEDAD*/
-  
-  float h = dht.readHumidity(); // Read temperature as Celsius (the default)  
-  float t = dht.readTemperature(); // Read temperature as Fahrenheit (isFahrenheit = true)  
-  float f = dht.readTemperature(true);  
-  
+
+  float h = dht.readHumidity(); // Read temperature as Celsius (the default)
+  float t = dht.readTemperature(); // Read temperature as Fahrenheit (isFahrenheit = true)
+  float f = dht.readTemperature(true);
+
   if (isnan(h) || isnan(t) || isnan(f)) { // Check if any reads failed and exit early (to try again).
     Serial.println("Failed to read from DHT sensor!");
     return;
-  }  
-  float hif = dht.computeHeatIndex(f, h); // Compute heat index in Fahrenheit (the default)  
+  }
+  float hif = dht.computeHeatIndex(f, h); // Compute heat index in Fahrenheit (the default)
   float hic = dht.computeHeatIndex(t, h, false);  // Compute heat index in Celsius (isFahreheit = false)
- 
-  /*Serial.print("H: ");
-  Serial.print(h);
-  Serial.print("\t T: ");
-  Serial.print(t);
-  Serial.print(" \t HI: ");
-  Serial.print(hic);
-  Serial.print(" \t HT: ");
-  Serial.println(hif);*/
-
-
 
 
   /*OBTENCION DATOS MISION GPS*/
-  
+
   //receive_gps();
-  char c = GPS.read();  // read data from the GPS 
+  char c = GPS.read();  // read data from the GPS
   // if you want to debug, this is a good time to do it!
-  
-  if (GPSECHO)    
+
+  if (GPSECHO)
     if (c) Serial.print(c);
   // if a sentence is received, we can check the checksum, parse it...
   //Serial.println("sdf1");
@@ -201,8 +188,8 @@ void loop() {
   }
   // if millis() or timer wraps around, we'll just reset it
   if (timer > millis()) timer = millis();
-  
-     
+
+
   // approximately every 3 seconds or so, print out the current stats
   if (millis() - timer > 3000) {
     timer = millis(); // reset the timer
@@ -217,7 +204,7 @@ void loop() {
     Serial.println(GPS.year, DEC);
     Serial.print("Fix: "); Serial.print((int)GPS.fix);
     Serial.print(" quality: "); Serial.println((int)GPS.fixquality);
-    float latitude, longitude,altitude;
+    float latitude, longitude, altitude;
     if (GPS.fix) {
       latitude = GPS.latitudeDegrees;
       longitude = GPS.longitudeDegrees;
@@ -232,12 +219,12 @@ void loop() {
       Serial.print("Satellites: "); Serial.println((int)GPS.satellites);
     }
 
-    
 
-    /*ENVIAR TELEMETRIA Y DATOS MISION*/    
-    char *cansatName= "CanSatCR";
+
+    /*ENVIAR TELEMETRIA Y DATOS MISION*/
+    char *cansatName = "CanSatCR";
     char radiopacket[40];
-    char *fhic,*fhif;
+    char *fhic, *fhif;
     //ftoa(fhic, hic, 1);
     int latDec = latitude;
     int longDec = longitude;
@@ -246,85 +233,94 @@ void loop() {
     int latFrac = abs(trunc(tmpLat * 10000));
     int longFrac = abs(trunc(tmpLong * 10000));
     int longFrac2 = abs(trunc(tmpLong * 1000000));
+    char *buf_lat="";
+    sprintf(buf_lat,"%06f",latitude);
+    Serial.print("This is america:");
+    Serial.println(buf_lat);
     
-    sprintf(tmpLatFrac, "%04d",latFrac);
-    sprintf(tmpLongFrac, "%04d",longFrac);
-      
-    Serial.print(tmpLong);
-    
-    sprintf(radiopacket,"%s#%i,%i,%i,%i,%i,%i.%s,%i.%s,%i,%i,%i,",cansatName,packetnum++,(int) h,(int) t,(int) hic,(int) hif,latDec,tmpLatFrac,longDec,tmpLongFrac,(int) altitude,camara_status,(int) rf69.lastRssi());
+    sprintf(tmpLatFrac, "%04d", latFrac);
+    sprintf(tmpLongFrac, "%04d", longFrac);
 
-    *tmpLatFrac="";
-    *tmpLongFrac="";
-  
+    //sprintf(radiopacket,"%s#%i,%i,%i,%i,%i,%i.%s,%i.%s,%i,%i,%i,",cansatName,packetnum++,(int) h,(int) t,(int) hic,(int) hif,latDec,tmpLatFrac,longDec,tmpLongFrac,(int) altitude,camara_status,(int) rf69.lastRssi());
+    sprintf(radiopacket, "%s#%i,%i,%i,%i,%i,%i.%s,%i.%s,%i,%i,%i,", cansatName, packetnum++, (int) h, (int) t, (int) hic, (int) hif, latDec, tmpLatFrac, longDec, tmpLongFrac, (int) altitude, camara_status, (int) rf69.lastRssi());
+
+    *tmpLatFrac = "";
+    *tmpLongFrac = "";
+
     //char *ftoa(char *a, double f, int precision)
-  
-    
-  
-    //Serial.println("\nSending beacon: #,h,t,hic,hif");    //TODO: quitar antes del lanzamiento  
-    Serial.println(radiopacket);                      //TODO: quitar antes del lanzamiento    
-    
-    rf69.send((uint8_t *)radiopacket, strlen(radiopacket));     //Envia el beacon por RF
-    //Serial.println("Waiting for acknowledge...");        //TODO: quitar antes del lanzamiento  
-    //rf69.waitPacketSent();              
 
-    
-    
-    
+
+
+    //Serial.println("\nSending beacon: #,h,t,hic,hif");    //TODO: quitar antes del lanzamiento
+    Serial.println(radiopacket);                      //TODO: quitar antes del lanzamiento
+
+    rf69.send((uint8_t *)radiopacket, strlen(radiopacket));     //Envia el beacon por RF
+    //Serial.println("Waiting for acknowledge...");        //TODO: quitar antes del lanzamiento
+    //rf69.waitPacketSent();
+
+
+
+
     uint8_t buf[RH_RF69_MAX_MESSAGE_LEN];
     uint8_t len = sizeof(buf);
-    
-    if (rf69.waitAvailableTimeout(500))  {     
+
+    if (rf69.waitAvailableTimeout(500))  {
       if (rf69.recv(buf, &len)) {       // Revisa si hay respuesta
-        //Serial.print("Reply: ");        //TODO: quitar antes del lanzamiento  
-        //Serial.println((char*)buf);     //TODO: quitar antes del lanzamiento
-        //Serial.print("RSSI: ");         //TODO: quitar antes del lanzamiento  
-        //Serial.println(rf69.lastRssi(), DEC);     //TODO: quitar antes del lanzamiento  
-  
-        if(buf[0]!=BEACON_VERF_CODE){
-          //Serial.println("Not a CMD!");        //TODO: quitar antes del lanzamiento          
-          camara_status = 0;
-          camera_video(camara_status); //TODO: agregar apagar
-        } 
-        else{
-          //Serial.println("Verified CMD!");        //TODO: quitar antes del lanzamiento  
-          //Serial.println("Turning ON video mission");        //TODO: quitar antes del lanzamiento  
-          camara_status = 1;
-          camera_video(true); //TODO: agregar apagar  //TODO: Verificar bien cual comando es (CMD decode)
+        Serial.print("Reply: ");        //TODO: quitar antes del lanzamiento
+        Serial.println((char*)buf);     //TODO: quitar antes del lanzamiento
+        Serial.print("RSSI: ");         //TODO: quitar antes del lanzamiento
+        Serial.println(rf69.lastRssi(), DEC);     //TODO: quitar antes del lanzamiento
+
+        if (buf[0] != BEACON_VERF_CODE) { //CMD de apagar
+          if (camara_status) { //Apagar
+            toggle_video(true);
+            Serial.println("Turning OFF video..."); //TODO: quitar antes del lanzamiento
+            camara_status = 0;
+          } else {
+            toggle_video(false);   //mantiene el estado
+          }
         }
-  
-        
+        else {    //CMD de prender
+          Serial.println("Turning ON video mission");        //TODO: quitar antes del lanzamiento
+          if (!camara_status) { //Prender
+            toggle_video(true); //TODO: Verificar bien cual comando es (CMD decode)
+            camara_status = 1;
+          } else {
+            toggle_video(false);   //mantiene el estado
+          }
+        }
+
       } else {
-        //Serial.println("Receive failed");   //TODO: quitar antes del lanzamiento  
+        //Serial.println("Receive failed");   //TODO: quitar antes del lanzamiento
       }
     } else {
-      //Serial.println("No reply!!");         //TODO: quitar antes del lanzamiento  
-    }  
+      //Serial.println("No reply!!");         //TODO: quitar antes del lanzamiento
+    }
 
 
     free(radiopacket);
-    
 
 
 
 
-    
+
+
   }//end of if from 2 seconds
-  
-
-  
-
-
-
-  
-  
 
 
 
 
-  
 
-  
+
+
+
+
+
+
+
+
+
+
 
 
 }
