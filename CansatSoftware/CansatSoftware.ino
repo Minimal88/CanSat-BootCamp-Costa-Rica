@@ -1,54 +1,19 @@
 #include <stdio.h>
-/*INCLUDES Y DEFINITIONS MISION COMS*/
-#include <SPI.h>
-#include <RH_RF69.h>
-#define __AVR_ATmega328P__
-#define RF69_FREQ 433.0
-#if defined (__AVR_ATmega328P__)  // Feather 328P w/wing
-#define RFM69_INT     3  // Definicion de pin
-#define RFM69_CS      4  // Definicion de pin
-#define RFM69_RST     2  // Definicion de pin
-#endif
-RH_RF69 rf69(RFM69_CS, RFM69_INT);  // Singleton instance of the radio driver
-#define BEACON_VERF_CODE        67      // 'C'
+#include <stdlib.h>
+#include "digital_pins.h"
+#include "coms.h"
+#include "payload.h"
 
 
-/*INCLUDES Y DEFINITIONS MISION GPS*/
-#include <Adafruit_GPS.h> // what's the name of the hardware serial port?
-#define GPSSerial Serial1
-Adafruit_GPS GPS(&GPSSerial);// Connect to the GPS on the hardware port
-#define GPSECHO false
-uint32_t timer = millis();
 
+/*DEFINICION DE VARIABLES GLOBALES*/
+const char *cansatName = "CanSatCR";
+int camara_status = 0;      //Estado de la camara> 0:No graba, 1:Graba
+DHT dht(DHTPIN, DHTTYPE);   //Inincializa el sensor de temperatura y humedad
+uint32_t timer = millis();  //Para GPS
+int16_t packetnum = 0;      //Contador de paquetes enviados
+float h,t,f,hif,hic;        //Variables para temperatura y humedad
 
-/*INCLUDES Y DEFINITIONS MISION TEMP Y HUMEDAD*/
-#include "DHT.h"
-#define DHTPIN 7          // Definicion de pin
-#define DHTTYPE DHT11     // Modelo del chip: DHT 11
-DHT dht(DHTPIN, DHTTYPE); // Inincializa el sensor de temperatura y humedad
-
-
-/*DEFINITIONS CAMARA*/
-int trig = 6;     //Definicion de pin
-int camara_status = 0;
-
-
-char tmpLongFrac[10];
-char tmpLatFrac[10];
-
-
-char *ftoa(char *a, float f, int precision)
-{
-  long p[] = {0, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000};
-  char *ret = a;
-  long heiltal = (long)f;
-  itoa(heiltal, a, 10);
-  while (*a != '\0') a++;
-  *a++ = '.';
-  long desimal = abs((long)((f - heiltal) * p[precision]));
-  itoa(desimal, a, 10);
-  return ret;
-}
 
 
 void toggle_video(bool state) {
@@ -58,35 +23,38 @@ void toggle_video(bool state) {
     digitalWrite(trig, HIGH);
     delay(3000);
     digitalWrite(trig, LOW);
-  } else {
+  } else {    //si False apaga el video
     digitalWrite(trig, LOW);
+  }  
+}
 
+void obtener_datos_sensor(){
+  h = dht.readHumidity();         // Lee la humedad
+  t = dht.readTemperature();      // Lee la temperatura en Celsius
+  f = dht.readTemperature(true);  // Lee la temperatura en Fahreheit
+  hif=0;
+  hic=0;  
+  if (isnan(h) || isnan(t) || isnan(f)) {     // Revisa la medicion obtenida
+    Serial.println("Failed to read from DHT sensor!");  //TODO: quitar antes del lanzamiento
+    //Si no se obtiene una medicion se devuelve un "0" 
+    h=0;  
+    t=0;
+    f=0;    
 
+  }else{
+    hif = dht.computeHeatIndex(f, h);         // Calcula el indicie de calor en Fahrenheit
+    hic = dht.computeHeatIndex(t, h, false);  // Calcula el indicie de calor en Fahrenheit
   }
-  //delay(30000);   //Delay a modificar para cambiar a modo de foto o modo de caotura de video
-}
-
-int intLen(unsigned x) {
-  if (x >= 100000)     return 6;
-  if (x >= 10000)      return 5;
-  if (x >= 1000)       return 4;
-  if (x >= 100)        return 3;
-  if (x >= 10)         return 2;
-  if (x >= 10)         return 1;
-  return 1;
 }
 
 
 
-int16_t packetnum = 0;  // packet counter, we increment per xmission
 void setup()
 {
   /*INICIACILIZACION DE PUERTO SERIAL*/ //TODO: quitar antes del lanzamiento
-  Serial.begin(115200);
-  //while (!Serial) { delay(1); } // wait until serial console is open, remove if not tethered to computer
+  Serial.begin(115200);  
 
   /*CONFIGURACION DEL RADIO*/
-
   pinMode(RFM69_RST, OUTPUT);               //Definicion del pin de reset
   digitalWrite(RFM69_RST, LOW);
   digitalWrite(RFM69_RST, HIGH); delay(10); //Reset Manual del radio
@@ -108,36 +76,23 @@ void setup()
 
 
   /*CONFIGURACION DEL SENSOR DE TEMP Y HUMEDAD*/
-  dht.begin();
+  dht.begin();    //TODO: Manejar error
+
 
   /*CONFIGURACION DE LA CAMRA*/
-
   pinMode(trig, OUTPUT);
   digitalWrite(trig, HIGH);
 
 
-  /*CONFIGURACION DEL GPS*/
-  //Serial.begin(115200);
+  /*CONFIGURACION DEL GPS*/  
   Serial.println("Cansat Mission Software!");
   GPS.begin(9600);
   // uncomment this line to turn on RMC (recommended minimum) and GGA (fix data) including altitude
-  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
-  // uncomment this line to turn on only the "minimum recommended" data
-  //GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
-  // For parsing data, we don't suggest using anything but either RMC only or RMC+GGA since
-  // the parser doesn't care about other sentences at this time
-  // Set the update rate
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 1 Hz update rate
-  // For the parsing code to work nicely and have time to sort thru the data, and
-  // print it out we don't suggest using anything higher than 1 Hz
-  // Request updates on antenna status, comment out to keep quiet
-  GPS.sendCommand(PGCMD_ANTENNA);
+  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);   //Modo de NMEA a RMC:minimo recomendado  
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);      //Tasa de actualización a 1 Hz
+  GPS.sendCommand(PGCMD_ANTENNA);                 //Configuracion de antena interna
   delay(1000);
   GPSSerial.println(PMTK_Q_RELEASE);// Ask for firmware version
-
-
-
-
 }
 
 
@@ -146,53 +101,26 @@ void setup()
 
 
 
-
-
-
-
 void loop() {
-  //delay(10);  // Wait 1 second between transmits, could also 'sleep' here!
-
   /*OBTENCION DATOS MISION TEMP Y HUMEDAD*/
-
-  float h = dht.readHumidity(); // Read temperature as Celsius (the default)
-  float t = dht.readTemperature(); // Read temperature as Fahrenheit (isFahrenheit = true)
-  float f = dht.readTemperature(true);
-
-  if (isnan(h) || isnan(t) || isnan(f)) { // Check if any reads failed and exit early (to try again).
-    Serial.println("Failed to read from DHT sensor!");
-    return;
-  }
-  float hif = dht.computeHeatIndex(f, h); // Compute heat index in Fahrenheit (the default)
-  float hic = dht.computeHeatIndex(t, h, false);  // Compute heat index in Celsius (isFahreheit = false)
+  obtener_datos_sensor();
 
 
-  /*OBTENCION DATOS MISION GPS*/
-
-  //receive_gps();
-  char c = GPS.read();  // read data from the GPS
-  // if you want to debug, this is a good time to do it!
-
+  /*OBTENCION DATOS MISION GPS*/  
+  char c = GPS.read();        //Lee los datos del GPS
   if (GPSECHO)
-    if (c) Serial.print(c);
-  // if a sentence is received, we can check the checksum, parse it...
-  //Serial.println("sdf1");
-  if (GPS.newNMEAreceived()) {
-    //Serial.println("sdf2");
-    // a tricky thing here is if we print the NMEA sentence, or data
-    // we end up not listening and catching other sentences!
-    // so be very wary if using OUTPUT_ALLDATA and trytng to print out data
-    //Serial.println(GPS.lastNMEA()); // this also sets the newNMEAreceived() flag to false
-    if (!GPS.parse(GPS.lastNMEA())) // this also sets the newNMEAreceived() flag to false
-      return; // we can fail to parse a sentence in which case we should just wait for another
+    if (c) Serial.print(c);   //TODO: quitar antes del lanzamiento
+  if (GPS.newNMEAreceived()) {  //Recibio un dato    
+    if (!GPS.parse(GPS.lastNMEA()))
+      return; 
   }
-  // if millis() or timer wraps around, we'll just reset it
-  if (timer > millis()) timer = millis();
+  
+  if (timer > millis()) timer = millis(); //Resetea el contador de tiempo si ya se paso del limite
 
 
-  // approximately every 3 seconds or so, print out the current stats
-  if (millis() - timer > 3000) {
-    timer = millis(); // reset the timer
+  
+  if (millis() - timer > 3000) {  //Cada 3 segundos envía los datos por COMS
+    timer = millis();                     //Resetea el contador de tiempo
     Serial.print("\nTime: ");
     Serial.print(GPS.hour, DEC); Serial.print(':');
     Serial.print(GPS.minute, DEC); Serial.print(':');
@@ -206,61 +134,35 @@ void loop() {
     Serial.print(" quality: "); Serial.println((int)GPS.fixquality);
     float latitude, longitude, altitude;
     if (GPS.fix) {
-      latitude = GPS.latitudeDegrees;
+      latitude = GPS.latitudeDegrees;      
       longitude = GPS.longitudeDegrees;
       altitude = GPS.altitude;
       Serial.print("Lat,Long: ");
       Serial.print(latitude, 6); Serial.print(GPS.lat);
       Serial.print(", ");
-      Serial.print(longitude, 6); Serial.println(GPS.lon);
-      //Serial.print("Speed (knots): "); Serial.println(GPS.speed);
-      //Serial.print("Angle: "); Serial.println(GPS.angle);
+      Serial.print(longitude, 6); Serial.println(GPS.lon);      
       Serial.print("Altitude: "); Serial.println(altitude);
       Serial.print("Satellites: "); Serial.println((int)GPS.satellites);
     }
 
 
 
-    /*ENVIAR TELEMETRIA Y DATOS MISION*/
-    char *cansatName = "CanSatCR";
-    char radiopacket[40];
+    /*ENVIAR TELEMETRIA Y DATOS MISION*/    
+    char radiopacket[50];
     char *fhic, *fhif;
-    //ftoa(fhic, hic, 1);
-    int latDec = latitude;
-    int longDec = longitude;
-    float tmpLat = latitude - latDec;
-    float tmpLong = longitude - longDec;
-    int latFrac = abs(trunc(tmpLat * 10000));
-    int longFrac = abs(trunc(tmpLong * 10000));
-    int longFrac2 = abs(trunc(tmpLong * 1000000));
-    char *buf_lat="";
-    sprintf(buf_lat,"%06f",latitude);
-    Serial.print("This is america:");
-    Serial.println(buf_lat);
     
-    sprintf(tmpLatFrac, "%04d", latFrac);
-    sprintf(tmpLongFrac, "%04d", longFrac);
+    char longitudeStr[10]="";      //Variable auxiliar GPS Latitude
+    dtostrf(longitude,2,6,longitudeStr);
+    
+    char latitudeStr[10] ="";       //Variable auxiliar GPS Longitud
+    dtostrf(latitude,2,6,latitudeStr);
+        
+    sprintf(radiopacket, "%s#%i,%i,%i,%i,%i,%s,%s,%i,%i,%i,", cansatName, packetnum++, (int) h, (int) t, (int) hic, (int) hif, latitudeStr, longitudeStr, (int) altitude, camara_status, (int) rf69.lastRssi());
 
-    //sprintf(radiopacket,"%s#%i,%i,%i,%i,%i,%i.%s,%i.%s,%i,%i,%i,",cansatName,packetnum++,(int) h,(int) t,(int) hic,(int) hif,latDec,tmpLatFrac,longDec,tmpLongFrac,(int) altitude,camara_status,(int) rf69.lastRssi());
-    sprintf(radiopacket, "%s#%i,%i,%i,%i,%i,%i.%s,%i.%s,%i,%i,%i,", cansatName, packetnum++, (int) h, (int) t, (int) hic, (int) hif, latDec, tmpLatFrac, longDec, tmpLongFrac, (int) altitude, camara_status, (int) rf69.lastRssi());
-
-    *tmpLatFrac = "";
-    *tmpLongFrac = "";
-
-    //char *ftoa(char *a, double f, int precision)
-
-
-
-    //Serial.println("\nSending beacon: #,h,t,hic,hif");    //TODO: quitar antes del lanzamiento
     Serial.println(radiopacket);                      //TODO: quitar antes del lanzamiento
 
     rf69.send((uint8_t *)radiopacket, strlen(radiopacket));     //Envia el beacon por RF
-    //Serial.println("Waiting for acknowledge...");        //TODO: quitar antes del lanzamiento
-    //rf69.waitPacketSent();
-
-
-
-
+        
     uint8_t buf[RH_RF69_MAX_MESSAGE_LEN];
     uint8_t len = sizeof(buf);
 
@@ -271,22 +173,22 @@ void loop() {
         Serial.print("RSSI: ");         //TODO: quitar antes del lanzamiento
         Serial.println(rf69.lastRssi(), DEC);     //TODO: quitar antes del lanzamiento
 
-        if (buf[0] != BEACON_VERF_CODE) { //CMD de apagar
-          if (camara_status) { //Apagar
+        if (buf[0] != BEACON_VERF_CODE) {   //CMD de apagar
+          if (camara_status) {              //Apagar grabación
             toggle_video(true);
             Serial.println("Turning OFF video..."); //TODO: quitar antes del lanzamiento
             camara_status = 0;
           } else {
-            toggle_video(false);   //mantiene el estado
+            toggle_video(false);            //Mantiene el estado de apagado o prendido
           }
         }
         else {    //CMD de prender
           Serial.println("Turning ON video mission");        //TODO: quitar antes del lanzamiento
-          if (!camara_status) { //Prender
-            toggle_video(true); //TODO: Verificar bien cual comando es (CMD decode)
+          if (!camara_status) {           //Empezar grabación
+            toggle_video(true);           //TODO: Verificar bien cual comando es (CMD decode)
             camara_status = 1;
           } else {
-            toggle_video(false);   //mantiene el estado
+            toggle_video(false);          //Mantiene el estado de apagado o prendido
           }
         }
 
@@ -297,32 +199,8 @@ void loop() {
       //Serial.println("No reply!!");         //TODO: quitar antes del lanzamiento
     }
 
-
     free(radiopacket);
-
-
-
-
-
-
-  }//end of if from 2 seconds
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  }
 }
 
 
