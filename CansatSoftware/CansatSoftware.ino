@@ -17,34 +17,11 @@ float h,t,f,hif,hic;        //Variables para temperatura y humedad
 
 
 void toggle_video(bool state) {
-  if (state) { //Si TRUE prende el video
-    digitalWrite(trig, LOW);
-    delay(3000);
-    digitalWrite(trig, HIGH);
-    delay(3000);
-    digitalWrite(trig, LOW);
-  } else {    //si False apaga el video
-    digitalWrite(trig, LOW);
-  }  
+  //Inserte su codigo aqui  2
 }
 
 void obtener_datos_sensor(){
-  h = dht.readHumidity();         // Lee la humedad
-  t = dht.readTemperature();      // Lee la temperatura en Celsius
-  f = dht.readTemperature(true);  // Lee la temperatura en Fahreheit
-  hif=0;
-  hic=0;  
-  if (isnan(h) || isnan(t) || isnan(f)) {     // Revisa la medicion obtenida
-    Serial.println("Failed to read from DHT sensor!");  //TODO: quitar antes del lanzamiento
-    //Si no se obtiene una medicion se devuelve un "0" 
-    h=0;  
-    t=0;
-    f=0;    
-
-  }else{
-    hif = dht.computeHeatIndex(f, h);         // Calcula el indicie de calor en Fahrenheit
-    hic = dht.computeHeatIndex(t, h, false);  // Calcula el indicie de calor en Fahrenheit
-  }
+  //Inserte su codigo aqui 1
 }
 
 
@@ -173,24 +150,7 @@ void loop() {
         Serial.print("RSSI: ");         //TODO: quitar antes del lanzamiento
         Serial.println(rf69.lastRssi(), DEC);     //TODO: quitar antes del lanzamiento
 
-        if (buf[0] != BEACON_VERF_CODE) {   //CMD de apagar
-          if (camara_status) {              //Apagar grabación
-            toggle_video(true);
-            Serial.println("Turning OFF video..."); //TODO: quitar antes del lanzamiento
-            camara_status = 0;
-          } else {
-            toggle_video(false);            //Mantiene el estado de apagado o prendido
-          }
-        }
-        else {    //CMD de prender
-          Serial.println("Turning ON video mission");        //TODO: quitar antes del lanzamiento
-          if (!camara_status) {           //Empezar grabación
-            toggle_video(true);           //TODO: Verificar bien cual comando es (CMD decode)
-            camara_status = 1;
-          } else {
-            toggle_video(false);          //Mantiene el estado de apagado o prendido
-          }
-        }
+        //Inserte su codigo aqui 3
 
       } else {
         //Serial.println("Receive failed");   //TODO: quitar antes del lanzamiento
